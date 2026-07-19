@@ -1,0 +1,9 @@
+{
+  "id": "modoru-proxy-plugin",
+  "name": "Modoru Proxy Plugin",
+  "url": "https://modoru.fun",
+  "authors": [],
+  "dependencies": [],
+  "main": "modoru.proxy.ProxyPlugin",
+  "version": "$version"
+}
