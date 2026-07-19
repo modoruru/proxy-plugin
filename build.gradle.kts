@@ -15,6 +15,11 @@ repositories {
 dependencies {
     compileOnly("com.velocitypowered:velocity-api:${property("velocity_version")}")
     annotationProcessor("com.velocitypowered:velocity-api:${property("velocity_version")}")
+
+    implementation("org.java-websocket:Java-WebSocket:${property("websocket_version")}")
+    implementation("org.json:json:${property("json_version")}")
+
+    implementation("net.elytrium:serializer:${property("serializer_version")}")
 }
 
 tasks {
