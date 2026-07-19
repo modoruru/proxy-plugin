@@ -1,6 +1,6 @@
 plugins {
     id("java")
-    id("com.gradleup.shadow").version("9.0.0-beta4")
+    id("com.gradleup.shadow").version("9.6.0")
 }
 
 group = "modoru.proxy"
@@ -13,8 +13,8 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.velocitypowered:velocity-api:4.1.0-SNAPSHOT")
-    annotationProcessor("com.velocitypowered:velocity-api:4.1.0-SNAPSHOT")
+    compileOnly("com.velocitypowered:velocity-api:${property("velocity_version")}")
+    annotationProcessor("com.velocitypowered:velocity-api:${property("velocity_version")}")
 }
 
 tasks {
