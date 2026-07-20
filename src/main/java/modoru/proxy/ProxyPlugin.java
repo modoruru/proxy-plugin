@@ -6,7 +6,8 @@ import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyPreShutdownEvent;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
-import modoru.proxy.storage.StorageClient;
+import modoru.proxy.tab.Tab;
+import modoru.proxy.tab.TabListener;
 import org.slf4j.Logger;
 
 import java.nio.file.Path;
@@ -19,9 +20,11 @@ public final class ProxyPlugin {
     private final ProxyServer proxyServer;
     private final Logger logger;
     private final Path dataDirectory;
+
     private final ScheduledExecutorService executorService;
     private final Configuration configuration;
-    private final StorageClient storageClient;
+
+    private final Tab tab;
 
     @Inject
     public ProxyPlugin(ProxyServer proxyServer, Logger logger, @DataDirectory Path dataDirectory) {
@@ -31,18 +34,19 @@ public final class ProxyPlugin {
 
         this.executorService = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors());
         this.configuration = new Configuration(dataDirectory.resolve("config.yml"));
-        this.storageClient = new StorageClient(proxyServer, executorService, configuration, logger);
+
+        this.tab = new Tab(proxyServer, executorService, configuration);
     }
 
     @Subscribe
     public void onProxyInitialize(ProxyInitializeEvent event) {
         configuration.reload();
-        storageClient.open();
+        proxyServer.getEventManager().register(this, new TabListener(tab));
     }
 
+    @SuppressWarnings("UnstableApiUsage")
     @Subscribe
     public void onProxyPreShutdown(ProxyPreShutdownEvent event) {
-        storageClient.close();
     }
 
 }

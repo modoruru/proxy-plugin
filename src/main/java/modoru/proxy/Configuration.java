@@ -18,14 +18,4 @@ public final class Configuration extends YamlSerializable {
         );
     }
 
-    public StorageClient storageClient = new StorageClient();
-
-    public static final class StorageClient {
-        public String address = "ws://localhost:80";
-        public String user = "root";
-        public String password = "root";
-        public int reconnectAttempts = 3;
-        public int reconnectAttemptDelay = 5;
-    }
-
 }
