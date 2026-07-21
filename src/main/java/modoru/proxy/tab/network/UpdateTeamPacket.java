@@ -29,12 +29,14 @@ public final class UpdateTeamPacket implements MinecraftPacket {
         return versions;
     }
 
-    private String name;
-    private Method method;
-    private Collection<String> players;
+    private @Nullable String name;
+    private @Nullable Method method;
+    private @Nullable Collection<String> players;
     private @Nullable Parameters parameters;
 
-    private UpdateTeamPacket(String name, Method method, Collection<String> players, @Nullable Parameters parameters) {
+    UpdateTeamPacket() {}
+
+    private UpdateTeamPacket(String name, Method method, @Nullable Collection<String> players, @Nullable Parameters parameters) {
         this.name = name;
         this.method = method;
         this.players = players;
@@ -75,12 +77,11 @@ public final class UpdateTeamPacket implements MinecraftPacket {
     public void encode(ByteBuf output, ProtocolUtils.Direction direction, ProtocolVersion protocolVersion) throws IllegalArgumentException {
         checkProtocolVersion(protocolVersion);
 
+        assert name != null && method != null && players != null && parameters != null;
+
         ProtocolUtils.writeString(output, name);
         output.writeByte(method.id());
-        if(method.hasParameters) {
-            assert parameters != null;
-            parameters.encode(output);
-        }
+        if(method.hasParameters) parameters.encode(output);
         if(method.hasPlayers) ListUtil.write(output, ProtocolUtils::writeString, players);
     }
 

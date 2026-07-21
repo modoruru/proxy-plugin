@@ -6,8 +6,10 @@ import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyPreShutdownEvent;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
+import modoru.proxy.tab.FormattedNamesHolder;
 import modoru.proxy.tab.Tab;
 import modoru.proxy.tab.TabListener;
+import modoru.proxy.tab.network.FormattedNamesPayload;
 import org.slf4j.Logger;
 
 import java.nio.file.Path;
@@ -24,6 +26,7 @@ public final class ProxyPlugin {
     private final ScheduledExecutorService executorService;
     private final Configuration configuration;
 
+    private final FormattedNamesHolder formattedNamesHolder;
     private final Tab tab;
 
     @Inject
@@ -35,13 +38,17 @@ public final class ProxyPlugin {
         this.executorService = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors());
         this.configuration = new Configuration(dataDirectory.resolve("config.yml"));
 
-        this.tab = new Tab(proxyServer, executorService, configuration);
+        this.formattedNamesHolder = new FormattedNamesHolder(proxyServer, configuration);
+        this.tab = new Tab(proxyServer, executorService, configuration, formattedNamesHolder);
     }
 
     @Subscribe
     public void onProxyInitialize(ProxyInitializeEvent event) {
         configuration.reload();
         proxyServer.getEventManager().register(this, new TabListener(tab));
+
+        proxyServer.getEventManager().register(this, formattedNamesHolder);
+        proxyServer.getChannelRegistrar().register(FormattedNamesPayload.IDENTIFIER);
     }
 
     @SuppressWarnings("UnstableApiUsage")

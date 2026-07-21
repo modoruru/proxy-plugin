@@ -22,13 +22,29 @@ public final class VarIntUtil {
         return out;
     }
 
+    public static int bytesToWrite(int value) {
+        if ((value & -128) == 0) return 1;
+        else if ((value & -16384) == 0) return Short.BYTES;
+
+        int count = 1;
+
+        while((value & -128) != 0) {
+            count++;
+            value >>>= 7;
+        }
+
+        return count;
+    }
+
     public static ByteBuf write(ByteBuf output, int value) {
         if ((value & -128) == 0) {
             output.writeByte(value);
-        } else if ((value & -16384) == 0) {
+        }
+        else if ((value & -16384) == 0) {
             int s = (value & 127 | 128) << 8 | value >>> 7;
             output.writeShort(s);
-        } else {
+        }
+        else {
             writeSlow(output, value);
         }
 

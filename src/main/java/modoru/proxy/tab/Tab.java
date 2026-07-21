@@ -13,14 +13,16 @@ public final class Tab {
     private final ProxyServer proxyServer;
     private final ScheduledExecutorService executorService;
     private final Configuration configuration;
+    private final FormattedNamesHolder formattedNamesHolder;
 
     private final Map<Player, TabEntry> tabEntries;
     private final SequencedMap<Key, Comparator<TabEntry>> sorters;
 
-    public Tab(ProxyServer proxyServer, ScheduledExecutorService executorService, Configuration configuration) {
+    public Tab(ProxyServer proxyServer, ScheduledExecutorService executorService, Configuration configuration, FormattedNamesHolder formattedNamesHolder) {
         this.proxyServer = proxyServer;
         this.executorService = executorService;
         this.configuration = configuration;
+        this.formattedNamesHolder = formattedNamesHolder;
 
         this.tabEntries = new HashMap<>();
         this.sorters = new LinkedHashMap<>();
