@@ -1,7 +1,10 @@
 package modoru.proxy.tab;
 
 import com.velocitypowered.api.proxy.Player;
+import com.velocitypowered.proxy.protocol.packet.UpsertPlayerInfoPacket;
+import modoru.proxy.tab.network.UpdateTeamPacket;
 import net.kyori.adventure.key.Key;
+import net.kyori.adventure.text.Component;
 import org.jspecify.annotations.Nullable;
 
 import java.text.NumberFormat;
@@ -19,12 +22,23 @@ public final class TabEntry implements Comparable<TabEntry> {
     boolean objectiveInitialized;
     @Nullable NumberFormat objectiveValue;
 
+    @Nullable String formattedName;
+    @Nullable Component displayName;
+    boolean freshDisplayName = true;
+
+    @Nullable String teamName;
+    boolean freshTeamName = true;
+    @Nullable UpdateTeamPacket teamAddPacket;
+    @Nullable UpsertPlayerInfoPacket updateDisplayNamePacket;
+
     TabEntry(Player player, SequencedMap<Key, Comparator<TabEntry>> sorters, Predicate<Player> listedPredicate) {
         this.player = player;
         this.sorters = sorters;
         this.listedPredicate = listedPredicate;
         this.unlisted = new HashSet<>();
         this.fakeTeams = new HashSet<>();
+
+        this.displayName = Component.text(player.getUsername());
     }
 
     /**

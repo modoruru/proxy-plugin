@@ -9,12 +9,24 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import modoru.proxy.Configuration;
 import modoru.proxy.tab.network.FormattedNamesPayload;
+import modoru.proxy.util.placeholder.DynamicPlaceholder;
+import modoru.proxy.util.placeholder.PlaceholdersUtil;
 import org.jspecify.annotations.Nullable;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
+@SuppressWarnings("unchecked")
 public final class FormattedNamesHolder {
+
+    private static final DynamicPlaceholder<Player>[] FALLBACK_PLACEHOLDERS;
+
+    static {
+        FALLBACK_PLACEHOLDERS = new DynamicPlaceholder[]{
+                DynamicPlaceholder.create("player_name", Player::getUsername)
+        };
+    }
 
     private final ProxyServer proxyServer;
     private final Configuration configuration;
@@ -29,12 +41,22 @@ public final class FormattedNamesHolder {
     public CompletableFuture<String> formattedName(Player player) {
         CachedName cachedName = cachedNames.computeIfAbsent(player.getUniqueId(), CachedName::new);
 
-        if(System.currentTimeMillis() - cachedName.lastReceive > configuration.tab.formattedNameTimeOfRelevance) {
+        if(System.currentTimeMillis() - cachedName.lastReceive > configuration.tab.formattedNames.timeOfRelevance) {
             byte[] payload = new byte[FormattedNamesPayload.payloadSizeForBackendBound(1)];
 
             FormattedNamesPayload.fromProxy(Set.of(cachedName.uuid)).encode(Unpooled.wrappedBuffer(payload));
             player.sendPluginMessage(FormattedNamesPayload.IDENTIFIER, payload);
-            return cachedName.currentRequest = new CompletableFuture<>();
+            return cachedName.currentRequest = new CompletableFuture<String>().completeOnTimeout(
+                    PlaceholdersUtil.resolveDynamic(
+                            configuration.tab.formattedNames.requestTimeoutFallback,
+                            player,
+                            '%',
+                            '%',
+                            FALLBACK_PLACEHOLDERS
+                    ),
+                    configuration.tab.formattedNames.requestTimeout,
+                    TimeUnit.MILLISECONDS
+            );
         }
 
         assert cachedName.lastReceivedName != null;
@@ -47,13 +69,29 @@ public final class FormattedNamesHolder {
         or, if player's formatted name is already requested, plugin will wait to his request to finish and return complete map
          */
 
+        if(players.isEmpty()) return CompletableFuture.completedFuture(Map.of());
+
+        // verify that players are on the same servers
+        String serverId = null;
+        for (Player player : players) {
+            var currentServer = player.getCurrentServer();
+            if(currentServer.isEmpty()) return CompletableFuture.failedFuture(new IllegalArgumentException("Players are on the different servers!"));
+
+            if(serverId == null) {
+                serverId = currentServer.get().getServerInfo().getName();
+                continue;
+            }
+
+            if(!serverId.equalsIgnoreCase(currentServer.get().getServerInfo().getName()))
+                return CompletableFuture.failedFuture(new IllegalArgumentException("Players are on the different servers!"));
+        }
 
         Map<UUID, String> skipped = new HashMap<>();
         Set<CachedName> toRequest = new HashSet<>();
         for (Player player : players) {
             CachedName cachedName = cachedNames.computeIfAbsent(player.getUniqueId(), CachedName::new);
 
-            if(cachedName.currentRequest == null || System.currentTimeMillis() - cachedName.lastReceive > configuration.tab.formattedNameTimeOfRelevance)
+            if(cachedName.currentRequest == null || System.currentTimeMillis() - cachedName.lastReceive > configuration.tab.formattedNames.timeOfRelevance)
                 toRequest.add(cachedName);
             else {
                 assert cachedName.lastReceivedName != null;
