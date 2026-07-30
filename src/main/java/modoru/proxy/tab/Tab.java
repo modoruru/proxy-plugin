@@ -5,6 +5,7 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.proxy.protocol.packet.UpsertPlayerInfoPacket;
 import com.velocitypowered.proxy.protocol.packet.chat.ComponentHolder;
 import modoru.proxy.Configuration;
+import modoru.proxy.tab.network.PacketRegistration;
 import modoru.proxy.tab.network.UpdateTeamPacket;
 import modoru.proxy.util.NetworkUtil;
 import modoru.proxy.util.placeholder.DynamicPlaceholder;
@@ -12,9 +13,12 @@ import modoru.proxy.util.placeholder.PlaceholdersUtil;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import org.jspecify.annotations.Nullable;
 
 import java.util.*;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 public final class Tab {
 
@@ -37,6 +41,8 @@ public final class Tab {
     private final Map<Player, TabEntry> tabEntries;
     private final SequencedMap<Key, Comparator<TabEntry>> sorters;
 
+    private @Nullable ScheduledFuture<?> updatePlayersNamesTask, updateTask;
+
     public Tab(ProxyServer proxyServer, ScheduledExecutorService executorService, Configuration configuration, FormattedNamesHolder formattedNamesHolder) {
         this.proxyServer = proxyServer;
         this.executorService = executorService;
@@ -46,6 +52,39 @@ public final class Tab {
         this.miniMessage = MiniMessage.miniMessage();
         this.tabEntries = new HashMap<>();
         this.sorters = new LinkedHashMap<>();
+
+        PacketRegistration.bootstrap();
+    }
+
+    public void start() {
+        if(updatePlayersNamesTask != null || updateTask != null) return;
+
+        var config = configuration.tab;
+        final long oneTickMillis = 50L;
+        updatePlayersNamesTask = executorService.scheduleAtFixedRate(
+                this::updatePlayersNames,
+                oneTickMillis,
+                config.formattedNames.timeOfRelevanceSeconds * 1000L,
+                TimeUnit.MILLISECONDS
+        );
+        updateTask = executorService.scheduleAtFixedRate(
+                this::update,
+                oneTickMillis * 2,
+                config.updateIntervalSeconds * 1000L,
+                TimeUnit.MILLISECONDS
+        );
+    }
+
+    public void stop() {
+        if(updatePlayersNamesTask == null || updateTask == null) return;
+
+        for (TabEntry value : tabEntries.values()) {
+            clearFakeTeams(value);
+        }
+        tabEntries.clear();
+
+        updatePlayersNamesTask.cancel(true);
+        updateTask.cancel(true);
     }
 
     private void updatePlayersNames() {

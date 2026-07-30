@@ -26,6 +26,8 @@ public final class Configuration extends YamlSerializable {
     public static final class Tab {
         public String playerNameFormat = "%formatted_name%";
 
+        public long updateIntervalSeconds = 1;
+
         public FormattedNames formattedNames = new FormattedNames();
 
         public List<String> header = List.of("", "example tab", "");
@@ -33,9 +35,9 @@ public final class Configuration extends YamlSerializable {
 
         public static final class FormattedNames {
             @Comment(value = {@CommentValue("Plugin requests a formatted name from the backend servers. This parameter determines how long it takes for formatted name to become irrelevant, requiring the plugin to request it again.")})
-            public long timeOfRelevance = 3000L;
+            public long timeOfRelevanceSeconds = 3;
 
-            public long requestTimeout = 5000L;
+            public long requestTimeoutSeconds = 5;
             public String requestTimeoutFallback = "%player_name%";
         }
     }

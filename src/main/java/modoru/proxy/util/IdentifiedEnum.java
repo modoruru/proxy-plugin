@@ -11,7 +11,7 @@ public interface IdentifiedEnum {
     }
 
     static <E extends Enum<E> & IdentifiedEnum> E byId(Class<E> clazz, int id) {
-        if(!clazz.isAssignableFrom(Enum.class)) throw new UnsupportedOperationException("Not a enum");
+        if(!Enum.class.isAssignableFrom(clazz)) throw new UnsupportedOperationException("Not a enum");
         return clazz.getEnumConstants()[id];
     }
 

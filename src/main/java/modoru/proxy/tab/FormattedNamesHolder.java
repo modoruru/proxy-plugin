@@ -12,10 +12,12 @@ import modoru.proxy.tab.network.FormattedNamesPayload;
 import modoru.proxy.util.placeholder.DynamicPlaceholder;
 import modoru.proxy.util.placeholder.PlaceholdersUtil;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @SuppressWarnings("unchecked")
 public final class FormattedNamesHolder {
@@ -29,11 +31,13 @@ public final class FormattedNamesHolder {
     }
 
     private final ProxyServer proxyServer;
+    private final Logger logger;
     private final Configuration configuration;
     private final Map<UUID, CachedName> cachedNames;
 
-    public FormattedNamesHolder(ProxyServer proxyServer, Configuration configuration) {
+    public FormattedNamesHolder(ProxyServer proxyServer, Logger logger, Configuration configuration) {
         this.proxyServer = proxyServer;
+        this.logger = logger;
         this.configuration = configuration;
         this.cachedNames = new HashMap<>();
     }
@@ -41,7 +45,7 @@ public final class FormattedNamesHolder {
     public CompletableFuture<String> formattedName(Player player) {
         CachedName cachedName = cachedNames.computeIfAbsent(player.getUniqueId(), CachedName::new);
 
-        if(System.currentTimeMillis() - cachedName.lastReceive > configuration.tab.formattedNames.timeOfRelevance) {
+        if(System.currentTimeMillis() - cachedName.lastReceive > configuration.tab.formattedNames.timeOfRelevanceSeconds * 1000L) {
             byte[] payload = new byte[FormattedNamesPayload.payloadSizeForBackendBound(1)];
 
             FormattedNamesPayload.fromProxy(Set.of(cachedName.uuid)).encode(Unpooled.wrappedBuffer(payload));
@@ -54,7 +58,7 @@ public final class FormattedNamesHolder {
                             '%',
                             FALLBACK_PLACEHOLDERS
                     ),
-                    configuration.tab.formattedNames.requestTimeout,
+                    configuration.tab.formattedNames.requestTimeoutSeconds * 1000L,
                     TimeUnit.MILLISECONDS
             );
         }
@@ -73,16 +77,19 @@ public final class FormattedNamesHolder {
 
         // verify that players are on the same servers
         String serverId = null;
+        ServerConnection anyServerConnection = null;
         for (Player player : players) {
-            var currentServer = player.getCurrentServer();
-            if(currentServer.isEmpty()) return CompletableFuture.failedFuture(new IllegalArgumentException("Players are on the different servers!"));
+            var currentServerOpt = player.getCurrentServer();
+            if(currentServerOpt.isEmpty()) return CompletableFuture.failedFuture(new IllegalArgumentException("Players are on the different servers!"));
 
+            ServerConnection currentServer = currentServerOpt.get();
             if(serverId == null) {
-                serverId = currentServer.get().getServerInfo().getName();
+                serverId = currentServer.getServerInfo().getName();
+                anyServerConnection = currentServer;
                 continue;
             }
 
-            if(!serverId.equalsIgnoreCase(currentServer.get().getServerInfo().getName()))
+            if(!serverId.equalsIgnoreCase(currentServer.getServerInfo().getName()))
                 return CompletableFuture.failedFuture(new IllegalArgumentException("Players are on the different servers!"));
         }
 
@@ -91,7 +98,7 @@ public final class FormattedNamesHolder {
         for (Player player : players) {
             CachedName cachedName = cachedNames.computeIfAbsent(player.getUniqueId(), CachedName::new);
 
-            if(cachedName.currentRequest == null || System.currentTimeMillis() - cachedName.lastReceive > configuration.tab.formattedNames.timeOfRelevance)
+            if(cachedName.currentRequest == null || System.currentTimeMillis() - cachedName.lastReceive > configuration.tab.formattedNames.timeOfRelevanceSeconds * 1000L)
                 toRequest.add(cachedName);
             else {
                 assert cachedName.lastReceivedName != null;
@@ -105,15 +112,31 @@ public final class FormattedNamesHolder {
         UUID requestUuid = UUID.randomUUID();
 
         List<CachedName> singleRequesters = new ArrayList<>();
-        for (CachedName cachedName : toRequest) {
+        toRequest.removeIf(cachedName -> {
             if(cachedName.currentRequest != null) {
                 singleRequesters.add(cachedName);
-                continue;
+                return true;
             }
 
             cachedName.currentRequest = future.thenApply(map -> map.get(cachedName.uuid));
             cachedName.groupedRequest = future;
             cachedName.groupedRequestUuid = requestUuid;
+
+            return false;
+        });
+
+        if(!toRequest.isEmpty()) {
+            ByteBuf byteBuf = Unpooled.buffer();
+            FormattedNamesPayload.fromProxy(
+                    toRequest.stream()
+                            .map(cachedName -> cachedName.uuid)
+                            .collect(Collectors.toSet())
+            ).encode(byteBuf);
+
+            byte[] payload = new byte[byteBuf.readableBytes()];
+            byteBuf.readBytes(payload);
+            anyServerConnection.sendPluginMessage(FormattedNamesPayload.IDENTIFIER, payload);
+            logger.warn("Sent {} payload with {} entries", FormattedNamesPayload.IDENTIFIER.toString(), toRequest.size());
         }
 
         CompletableFuture<Map<UUID, String>> toReturnFuture = future;
@@ -147,6 +170,7 @@ public final class FormattedNamesHolder {
         final long receiveTimestamp = System.currentTimeMillis();
 
         ByteBuf input = Unpooled.wrappedBuffer(event.getData());
+        logger.info("received message with {} length", input.readableBytes());
         FormattedNamesPayload payload;
         try {
             payload = FormattedNamesPayload.decode(input);

@@ -143,6 +143,7 @@ public final class UpdateTeamPacket implements MinecraftPacket {
 
     }
 
+    @SuppressWarnings("unused")
     public enum Method implements IdentifiedEnum {
         ADD   (true, true),
         REMOVE(false, false),
@@ -163,6 +164,7 @@ public final class UpdateTeamPacket implements MinecraftPacket {
 
     }
 
+    @SuppressWarnings("unused")
     public enum TeamVisibility implements IdentifiedEnum {
         ALWAYS,
         NEVER,
@@ -174,6 +176,7 @@ public final class UpdateTeamPacket implements MinecraftPacket {
         }
     }
 
+    @SuppressWarnings("unused")
     public enum TeamCollisionRule implements IdentifiedEnum {
         ALWAYS,
         NEVER,
@@ -185,6 +188,7 @@ public final class UpdateTeamPacket implements MinecraftPacket {
         }
     }
 
+    @SuppressWarnings("unused")
     public enum TeamColor implements IdentifiedEnum {
         BLACK,
         DARK_BLUE,

@@ -38,7 +38,7 @@ public final class ProxyPlugin {
         this.executorService = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors());
         this.configuration = new Configuration(dataDirectory.resolve("config.yml"));
 
-        this.formattedNamesHolder = new FormattedNamesHolder(proxyServer, configuration);
+        this.formattedNamesHolder = new FormattedNamesHolder(proxyServer, logger, configuration);
         this.tab = new Tab(proxyServer, executorService, configuration, formattedNamesHolder);
     }
 
@@ -49,11 +49,14 @@ public final class ProxyPlugin {
 
         proxyServer.getEventManager().register(this, formattedNamesHolder);
         proxyServer.getChannelRegistrar().register(FormattedNamesPayload.IDENTIFIER);
+
+        tab.start();
     }
 
     @SuppressWarnings("UnstableApiUsage")
     @Subscribe
     public void onProxyPreShutdown(ProxyPreShutdownEvent event) {
+        tab.stop();
     }
 
 }
