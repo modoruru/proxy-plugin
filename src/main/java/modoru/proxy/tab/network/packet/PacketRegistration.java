@@ -1,4 +1,4 @@
-package modoru.proxy.tab.network;
+package modoru.proxy.tab.network.packet;
 
 import com.velocitypowered.api.network.ProtocolVersion;
 import com.velocitypowered.proxy.protocol.MinecraftPacket;

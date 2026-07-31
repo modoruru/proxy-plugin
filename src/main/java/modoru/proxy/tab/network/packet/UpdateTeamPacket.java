@@ -1,4 +1,4 @@
-package modoru.proxy.tab.network;
+package modoru.proxy.tab.network.packet;
 
 import com.velocitypowered.api.network.ProtocolVersion;
 import com.velocitypowered.proxy.connection.MinecraftSessionHandler;
@@ -6,6 +6,8 @@ import com.velocitypowered.proxy.protocol.MinecraftPacket;
 import com.velocitypowered.proxy.protocol.ProtocolUtils;
 import com.velocitypowered.proxy.protocol.packet.chat.ComponentHolder;
 import io.netty.buffer.ByteBuf;
+import modoru.proxy.tab.network.util.ListUtil;
+import modoru.proxy.tab.network.util.VarIntUtil;
 import modoru.proxy.util.IdentifiedEnum;
 import net.kyori.adventure.nbt.BinaryTag;
 import net.kyori.adventure.text.Component;

@@ -6,10 +6,12 @@ import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyPreShutdownEvent;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
-import modoru.proxy.tab.FormattedNamesHolder;
+import modoru.proxy.tab.BackendCommunication;
 import modoru.proxy.tab.Tab;
 import modoru.proxy.tab.TabListener;
-import modoru.proxy.tab.network.FormattedNamesPayload;
+import modoru.proxy.tab.network.FormattedTabPayload;
+import modoru.proxy.tab.network.FormattedUsernamesPayload;
+import modoru.proxy.tab.network.TabFormatPayload;
 import org.slf4j.Logger;
 
 import java.nio.file.Path;
@@ -26,7 +28,7 @@ public final class ProxyPlugin {
     private final ScheduledExecutorService executorService;
     private final Configuration configuration;
 
-    private final FormattedNamesHolder formattedNamesHolder;
+    private final BackendCommunication backendCommunication;
     private final Tab tab;
 
     @Inject
@@ -38,8 +40,8 @@ public final class ProxyPlugin {
         this.executorService = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors());
         this.configuration = new Configuration(dataDirectory.resolve("config.yml"));
 
-        this.formattedNamesHolder = new FormattedNamesHolder(proxyServer, logger, configuration);
-        this.tab = new Tab(proxyServer, executorService, configuration, formattedNamesHolder);
+        this.backendCommunication = new BackendCommunication(configuration);
+        this.tab = new Tab(proxyServer, executorService, configuration, backendCommunication);
     }
 
     @Subscribe
@@ -47,8 +49,12 @@ public final class ProxyPlugin {
         configuration.reload();
         proxyServer.getEventManager().register(this, new TabListener(tab));
 
-        proxyServer.getEventManager().register(this, formattedNamesHolder);
-        proxyServer.getChannelRegistrar().register(FormattedNamesPayload.IDENTIFIER);
+        proxyServer.getEventManager().register(this, backendCommunication);
+        proxyServer.getChannelRegistrar().register(
+                FormattedUsernamesPayload.IDENTIFIER,
+                FormattedTabPayload.IDENTIFIER,
+                TabFormatPayload.IDENTIFIER
+        );
 
         tab.start();
     }

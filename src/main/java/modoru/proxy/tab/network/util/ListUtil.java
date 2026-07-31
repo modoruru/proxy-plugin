@@ -1,4 +1,4 @@
-package modoru.proxy.tab.network;
+package modoru.proxy.tab.network.util;
 
 import io.netty.buffer.ByteBuf;
 

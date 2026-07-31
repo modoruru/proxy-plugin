@@ -24,22 +24,19 @@ public final class Configuration extends YamlSerializable {
     public Tab tab = new Tab();
 
     public static final class Tab {
-        public String playerNameFormat = "%formatted_name%";
+        public int updateIntervalSeconds = 1;
 
-        public long updateIntervalSeconds = 1;
-
-        public FormattedNames formattedNames = new FormattedNames();
-
-        public List<String> header = List.of("", "example tab", "");
-        public List<String> footer = List.of("", "online %online% | ping %ping%", "");
-
-        public static final class FormattedNames {
-            @Comment(value = {@CommentValue("Plugin requests a formatted name from the backend servers. This parameter determines how long it takes for formatted name to become irrelevant, requiring the plugin to request it again.")})
-            public long timeOfRelevanceSeconds = 3;
-
-            public long requestTimeoutSeconds = 5;
-            public String requestTimeoutFallback = "%player_name%";
-        }
+        public List<String> header = List.of(
+                "",
+                "    example tab    ",
+                ""
+        );
+        public List<String> footer = List.of(
+                "",
+                "    online %global_online% | ping %ping%     ",
+                "    %tps% ticks/s | %mspt% ms/tick    ",
+                ""
+        );
     }
 
 }

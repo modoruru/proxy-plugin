@@ -5,8 +5,8 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.proxy.protocol.packet.UpsertPlayerInfoPacket;
 import com.velocitypowered.proxy.protocol.packet.chat.ComponentHolder;
 import modoru.proxy.Configuration;
-import modoru.proxy.tab.network.PacketRegistration;
-import modoru.proxy.tab.network.UpdateTeamPacket;
+import modoru.proxy.tab.network.packet.PacketRegistration;
+import modoru.proxy.tab.network.packet.UpdateTeamPacket;
 import modoru.proxy.util.NetworkUtil;
 import modoru.proxy.util.placeholder.DynamicPlaceholder;
 import modoru.proxy.util.placeholder.PlaceholdersUtil;
@@ -22,51 +22,60 @@ import java.util.concurrent.TimeUnit;
 
 public final class Tab {
 
-    private static final DynamicPlaceholder<TabEntry>[] PLAYER_PLACEHOLDERS;
+    private static final DynamicPlaceholder<TabEntry>[] PLACEHOLDERS = create(
+            DynamicPlaceholder.create("player_name", entry -> entry.player.getUsername()),
+            DynamicPlaceholder.create("formatted_name", entry -> entry.formattedName),
+            DynamicPlaceholder.create("ping", entry -> entry.player.getPing()),
+            DynamicPlaceholder.create(
+                    "global_online",
+                    entry -> entry.tab.proxyServer.getAllPlayers()
+                            .stream()
+                            .map(Player::getCurrentServer)
+                            .filter(Optional::isPresent)
+                            .count()
+            )
+    );
 
-    static {
-        PLAYER_PLACEHOLDERS = new DynamicPlaceholder[]{
-                DynamicPlaceholder.<TabEntry>create("player_name", entry -> entry.player.getUsername()),
-                DynamicPlaceholder.<TabEntry>create("formatted_name", entry -> entry.formattedName),
-                DynamicPlaceholder.<TabEntry>create("ping", entry -> entry.player.getPing())
-        };
+
+    @SafeVarargs
+    private static DynamicPlaceholder<TabEntry>[] create(DynamicPlaceholder<TabEntry>... placeholders) {
+        return placeholders;
     }
 
     private final ProxyServer proxyServer;
     private final ScheduledExecutorService executorService;
     private final Configuration configuration;
-    private final FormattedNamesHolder formattedNamesHolder;
+    private final BackendCommunication backendCommunication;
 
     private final MiniMessage miniMessage;
     private final Map<Player, TabEntry> tabEntries;
     private final SequencedMap<Key, Comparator<TabEntry>> sorters;
 
-    private @Nullable ScheduledFuture<?> updatePlayersNamesTask, updateTask;
+    private @Nullable ScheduledFuture<?> updateTask;
 
-    public Tab(ProxyServer proxyServer, ScheduledExecutorService executorService, Configuration configuration, FormattedNamesHolder formattedNamesHolder) {
+    public Tab(ProxyServer proxyServer, ScheduledExecutorService executorService, Configuration configuration, BackendCommunication backendCommunication) {
         this.proxyServer = proxyServer;
         this.executorService = executorService;
         this.configuration = configuration;
-        this.formattedNamesHolder = formattedNamesHolder;
+        this.backendCommunication = backendCommunication;
 
         this.miniMessage = MiniMessage.miniMessage();
         this.tabEntries = new HashMap<>();
         this.sorters = new LinkedHashMap<>();
 
+        sorters.putLast(
+                Key.key("modoru", "alphabetical"),
+                (first, second) -> first.player.getUsername().compareToIgnoreCase(second.player.getUsername())
+        );
+
         PacketRegistration.bootstrap();
     }
 
     public void start() {
-        if(updatePlayersNamesTask != null || updateTask != null) return;
+        if(updateTask != null) return;
 
         var config = configuration.tab;
         final long oneTickMillis = 50L;
-        updatePlayersNamesTask = executorService.scheduleAtFixedRate(
-                this::updatePlayersNames,
-                oneTickMillis,
-                config.formattedNames.timeOfRelevanceSeconds * 1000L,
-                TimeUnit.MILLISECONDS
-        );
         updateTask = executorService.scheduleAtFixedRate(
                 this::update,
                 oneTickMillis * 2,
@@ -76,53 +85,15 @@ public final class Tab {
     }
 
     public void stop() {
-        if(updatePlayersNamesTask == null || updateTask == null) return;
+        if(updateTask == null) return;
 
         for (TabEntry value : tabEntries.values()) {
             clearFakeTeams(value);
         }
         tabEntries.clear();
 
-        updatePlayersNamesTask.cancel(true);
         updateTask.cancel(true);
-    }
-
-    private void updatePlayersNames() {
-        Map<String, Set<Player>> playersByServer = new HashMap<>();
-        for (TabEntry entry : tabEntries.values()) {
-            var currentServer = entry.player.getCurrentServer();
-            if(currentServer.isEmpty()) continue;
-
-            playersByServer.computeIfAbsent(
-                    currentServer.get().getServerInfo().getName(),
-                    _ -> new HashSet<>()
-            ).add(entry.player);
-        }
-
-        if(playersByServer.isEmpty()) return;
-
-        for (Set<Player> groupedPlayers : playersByServer.values()) {
-            formattedNamesHolder.formattedNames(groupedPlayers).thenAccept(map -> {
-                for (Map.Entry<UUID, String> entry : map.entrySet()) {
-                    TabEntry tabEntry = proxyServer.getPlayer(entry.getKey())
-                            .map(tabEntries::get)
-                            .orElse(null);
-                    if(tabEntry == null) continue;
-
-                    tabEntry.formattedName = entry.getValue();
-                    tabEntry.displayName = miniMessage.deserialize(
-                            PlaceholdersUtil.resolveDynamic(
-                                    configuration.tab.playerNameFormat,
-                                    tabEntry,
-                                    '%',
-                                    '%',
-                                    PLAYER_PLACEHOLDERS
-                            )
-                    );
-                    tabEntry.freshDisplayName = true;
-                }
-            });
-        }
+        updateTask = null;
     }
 
     private void clearFakeTeams(TabEntry entry) {
@@ -141,6 +112,7 @@ public final class Tab {
         int listSize = list.size();
         int maxIndexLength = String.valueOf(listSize).length();
 
+        long updateTimestamp = System.currentTimeMillis();
         for (int i = 0; i < listSize; i++) {
             TabEntry entry = list.get(i);
             clearFakeTeams(entry);
@@ -167,12 +139,17 @@ public final class Tab {
                 );
             }
 
-            entry.updateDisplayNamePacket = new UpsertPlayerInfoPacket();
+            var formattedUsername = backendCommunication.formattedUsername(entry.player);
+            if(formattedUsername.receiveTimestamp() > entry.lastNameUpdate) {
+                entry.lastNameUpdate = updateTimestamp;
+                entry.freshDisplayName = true;
 
-            var updateDisplayNameEntry = new UpsertPlayerInfoPacket.Entry(entry.player.getUniqueId());
-            updateDisplayNameEntry.setDisplayName(new ComponentHolder(entry.player.getProtocolVersion(), entry.displayName));
+                entry.formattedName = formattedUsername.formattedUsername();
+                entry.displayName = miniMessage.deserialize(entry.formattedName);
 
-            if(entry.freshDisplayName) {
+                var updateDisplayNameEntry = new UpsertPlayerInfoPacket.Entry(entry.player.getUniqueId());
+                updateDisplayNameEntry.setDisplayName(new ComponentHolder(entry.player.getProtocolVersion(), entry.displayName));
+
                 entry.updateDisplayNamePacket = new UpsertPlayerInfoPacket(
                         EnumSet.of(UpsertPlayerInfoPacket.Action.UPDATE_DISPLAY_NAME),
                         List.of(updateDisplayNameEntry)
@@ -199,35 +176,40 @@ public final class Tab {
 
                 entry.fakeTeams.add(teamName);
 
-                if(entry.freshDisplayName) NetworkUtil.sendPacket(viewer, entry.updateDisplayNamePacket);
+                if(entry.freshDisplayName) {
+                    assert entry.updateDisplayNamePacket != null;
+                    NetworkUtil.sendPacket(viewer, entry.updateDisplayNamePacket);
+                }
                 if(entry.freshTeamName) {
                     assert entry.teamAddPacket != null;
                     NetworkUtil.sendPacket(viewer, entry.teamAddPacket);
-                }
-
-                if(entry.objectiveInitialized) {
-                    // todo
                 }
             }
 
             entry.freshDisplayName = false;
             entry.freshTeamName = false;
 
+            var headerAndFooter = backendCommunication.headerAndFooter(entry.player);
             entry.player.sendPlayerListHeaderAndFooter(
-                    buildHeaderOrFooter(configuration.tab.header),
-                    buildHeaderOrFooter(configuration.tab.footer)
+                    buildHeaderOrFooter(entry, headerAndFooter.header()),
+                    buildHeaderOrFooter(entry, headerAndFooter.footer())
             );
         }
     }
 
-    // todo: add placeholders
-    private Component buildHeaderOrFooter(List<String> lines) {
-        return miniMessage.deserialize(String.join("\n", lines));
+    private Component buildHeaderOrFooter(TabEntry entry, List<String> lines) {
+        return miniMessage.deserialize(PlaceholdersUtil.resolveDynamic(
+                String.join("\n", lines),
+                entry,
+                '%', '%',
+                PLACEHOLDERS
+        ));
     }
 
     void addPlayer(Player player) {
         if(tabEntries.containsKey(player)) return;
         tabEntries.put(player, new TabEntry(
+                this,
                 player,
                 sorters,
                 _ -> true // todo: unlisted players
