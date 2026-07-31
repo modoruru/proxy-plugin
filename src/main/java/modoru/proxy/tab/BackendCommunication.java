@@ -3,21 +3,26 @@ package modoru.proxy.tab;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.connection.PluginMessageEvent;
+import com.velocitypowered.api.event.player.KickedFromServerEvent;
+import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.proxy.messages.ChannelIdentifier;
+import com.velocitypowered.api.proxy.server.RegisteredServer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import modoru.proxy.Configuration;
 import modoru.proxy.tab.network.FormattedTabPayload;
 import modoru.proxy.tab.network.FormattedUsernamesPayload;
 import modoru.proxy.tab.network.TabFormatPayload;
+import org.slf4j.Logger;
 
 import java.util.*;
 
 // works by accepting recurring packets from the backend
 public final class BackendCommunication {
 
+    private final Logger logger;
     private final Configuration configuration;
     private final Map<UUID, TabViewer> tabViewers;
 
@@ -25,7 +30,8 @@ public final class BackendCommunication {
 
     private final HeaderAndFooter fallbackHeaderAndFooter;
 
-    public BackendCommunication(Configuration configuration) {
+    public BackendCommunication(Logger logger, Configuration configuration) {
+        this.logger = logger;
         this.configuration = configuration;
         this.tabViewers = new HashMap<>();
 
@@ -89,8 +95,26 @@ public final class BackendCommunication {
         else handleTabPayload(backend, input);
     }
 
+    private void tryToDropServerAwareness(RegisteredServer server) {
+        if(server.getPlayersConnected().size() - 1 >= 1) return;
+        serversAwareOfTabFormat.remove(server.getServerInfo().getName());
+    }
+
+    @Subscribe
+    private void onKickedFromServer(KickedFromServerEvent event) {
+        tryToDropServerAwareness(event.getServer());
+    }
+
+    @Subscribe
+    private void onServerConnected(ServerConnectedEvent event) {
+        event.getPreviousServer().ifPresent(this::tryToDropServerAwareness);
+    }
+
     @Subscribe
     private void onDisconnect(DisconnectEvent event) {
+        event.getPlayer().getCurrentServer()
+                .map(ServerConnection::getServer)
+                .ifPresent(this::tryToDropServerAwareness);
         tabViewers.remove(event.getPlayer().getUniqueId());
     }
 

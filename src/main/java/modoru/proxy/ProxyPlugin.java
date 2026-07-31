@@ -40,7 +40,7 @@ public final class ProxyPlugin {
         this.executorService = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors());
         this.configuration = new Configuration(dataDirectory.resolve("config.yml"));
 
-        this.backendCommunication = new BackendCommunication(configuration);
+        this.backendCommunication = new BackendCommunication(logger, configuration);
         this.tab = new Tab(proxyServer, executorService, configuration, backendCommunication);
     }
 
