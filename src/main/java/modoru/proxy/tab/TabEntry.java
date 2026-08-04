@@ -17,10 +17,10 @@ public final class TabEntry implements Comparable<TabEntry> {
     final SequencedMap<Key, Comparator<TabEntry>> sorters;
     final Predicate<Player> listedPredicate;
     final Set<TabEntry> unlisted;
-    final Set<String> fakeTeams;
+    final Map<String, UUID> fakeTeams;
 
     @Nullable String formattedName;
-    @Nullable Component displayName;
+    Component displayName;
     long lastNameUpdate;
     boolean freshDisplayName = true;
 
@@ -35,7 +35,7 @@ public final class TabEntry implements Comparable<TabEntry> {
         this.sorters = sorters;
         this.listedPredicate = listedPredicate;
         this.unlisted = new HashSet<>();
-        this.fakeTeams = new HashSet<>();
+        this.fakeTeams = new HashMap<>();
 
         this.displayName = Component.text(player.getUsername());
     }

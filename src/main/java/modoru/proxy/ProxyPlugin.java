@@ -59,7 +59,6 @@ public final class ProxyPlugin {
         tab.start();
     }
 
-    @SuppressWarnings("UnstableApiUsage")
     @Subscribe
     public void onProxyPreShutdown(ProxyPreShutdownEvent event) {
         tab.stop();

@@ -2,6 +2,8 @@ package modoru.proxy.tab;
 
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
+import com.velocitypowered.api.proxy.player.TabList;
+import com.velocitypowered.api.proxy.player.TabListEntry;
 import com.velocitypowered.proxy.protocol.packet.UpsertPlayerInfoPacket;
 import com.velocitypowered.proxy.protocol.packet.chat.ComponentHolder;
 import modoru.proxy.Configuration;
@@ -87,22 +89,19 @@ public final class Tab {
     public void stop() {
         if(updateTask == null) return;
 
-        for (TabEntry value : tabEntries.values()) {
-            clearFakeTeams(value);
+        for (TabEntry entry : tabEntries.values()) {
+            if(entry.fakeTeams.isEmpty()) continue;
+
+            for (String oldTeam : entry.fakeTeams.keySet()) {
+                NetworkUtil.sendPacket(entry.player, UpdateTeamPacket.createRemovePacket(oldTeam));
+            }
+            entry.fakeTeams.clear();
         }
+
         tabEntries.clear();
 
         updateTask.cancel(true);
         updateTask = null;
-    }
-
-    private void clearFakeTeams(TabEntry entry) {
-        if(entry.fakeTeams.isEmpty()) return;
-
-        for (String oldTeam : entry.fakeTeams) {
-            NetworkUtil.sendPacket(entry.player, UpdateTeamPacket.createRemovePacket(oldTeam));
-        }
-        entry.fakeTeams.clear();
     }
 
     private void update() {
@@ -115,9 +114,9 @@ public final class Tab {
         long updateTimestamp = System.currentTimeMillis();
         for (int i = 0; i < listSize; i++) {
             TabEntry entry = list.get(i);
-            clearFakeTeams(entry);
+            Player player = entry.player;
 
-            String playerName = entry.player.getUsername();
+            String playerName = player.getUsername();
             String teamName = String.format("%0" + maxIndexLength + "d", i);
             if(!teamName.equalsIgnoreCase(entry.teamName)) {
                 entry.freshTeamName = true;
@@ -139,7 +138,7 @@ public final class Tab {
                 );
             }
 
-            var formattedUsername = backendCommunication.formattedUsername(entry.player);
+            var formattedUsername = backendCommunication.formattedUsername(player);
             if(formattedUsername.receiveTimestamp() > entry.lastNameUpdate) {
                 entry.lastNameUpdate = updateTimestamp;
                 entry.freshDisplayName = true;
@@ -147,8 +146,8 @@ public final class Tab {
                 entry.formattedName = formattedUsername.formattedUsername();
                 entry.displayName = miniMessage.deserialize(entry.formattedName);
 
-                var updateDisplayNameEntry = new UpsertPlayerInfoPacket.Entry(entry.player.getUniqueId());
-                updateDisplayNameEntry.setDisplayName(new ComponentHolder(entry.player.getProtocolVersion(), entry.displayName));
+                var updateDisplayNameEntry = new UpsertPlayerInfoPacket.Entry(player.getUniqueId());
+                updateDisplayNameEntry.setDisplayName(new ComponentHolder(player.getProtocolVersion(), entry.displayName));
 
                 entry.updateDisplayNamePacket = new UpsertPlayerInfoPacket(
                         EnumSet.of(UpsertPlayerInfoPacket.Action.UPDATE_DISPLAY_NAME),
@@ -174,13 +173,27 @@ public final class Tab {
                     if(!result.listed()) continue;
                 }
 
-                entry.fakeTeams.add(teamName);
+                TabList viewerTabList = viewer.getTabList();
+                if(viewerTabList.getEntry(player.getUniqueId()).isEmpty()) {
+                    viewerTabList.addEntry(
+                            TabListEntry.builder()
+                                    .profile(player.getGameProfile())
+                                    .displayName(entry.displayName)
+                                    .tabList(player.getTabList())
+                                    .build()
+                    );
+                }
 
                 if(entry.freshDisplayName) {
                     assert entry.updateDisplayNamePacket != null;
                     NetworkUtil.sendPacket(viewer, entry.updateDisplayNamePacket);
                 }
+
                 if(entry.freshTeamName) {
+                    UUID oldOwner = viewerEntry.fakeTeams.put(entry.teamName, player.getUniqueId());
+                    if(oldOwner != null)
+                        NetworkUtil.sendPacket(viewer, UpdateTeamPacket.createRemovePacket(entry.teamName));
+
                     assert entry.teamAddPacket != null;
                     NetworkUtil.sendPacket(viewer, entry.teamAddPacket);
                 }
@@ -189,8 +202,8 @@ public final class Tab {
             entry.freshDisplayName = false;
             entry.freshTeamName = false;
 
-            var headerAndFooter = backendCommunication.headerAndFooter(entry.player);
-            entry.player.sendPlayerListHeaderAndFooter(
+            var headerAndFooter = backendCommunication.headerAndFooter(player);
+            player.sendPlayerListHeaderAndFooter(
                     buildHeaderOrFooter(entry, headerAndFooter.header()),
                     buildHeaderOrFooter(entry, headerAndFooter.footer())
             );
