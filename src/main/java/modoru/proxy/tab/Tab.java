@@ -4,6 +4,7 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.player.TabList;
 import com.velocitypowered.api.proxy.player.TabListEntry;
+import com.velocitypowered.proxy.protocol.MinecraftPacket;
 import com.velocitypowered.proxy.protocol.packet.UpsertPlayerInfoPacket;
 import com.velocitypowered.proxy.protocol.packet.chat.ComponentHolder;
 import modoru.proxy.Configuration;
@@ -111,6 +112,9 @@ public final class Tab {
         int listSize = list.size();
         int maxIndexLength = String.valueOf(listSize).length();
 
+        List<MinecraftPacket> deleteTeamsBatch = new ArrayList<>();
+        MinecraftPacket[] addTeamsBatch = new MinecraftPacket[listSize];
+
         long updateTimestamp = System.currentTimeMillis();
         for (int i = 0; i < listSize; i++) {
             TabEntry entry = list.get(i);
@@ -119,10 +123,13 @@ public final class Tab {
             String playerName = player.getUsername();
             String teamName = String.format("%0" + maxIndexLength + "d", i);
             if(!teamName.equalsIgnoreCase(entry.teamName)) {
+                if(entry.teamName != null)
+                    deleteTeamsBatch.add(UpdateTeamPacket.createRemovePacket(entry.teamName));
+
                 entry.freshTeamName = true;
                 entry.teamName = teamName;
 
-                entry.teamAddPacket = UpdateTeamPacket.createAddOrModifyPacket(
+                addTeamsBatch[i] = UpdateTeamPacket.createAddOrModifyPacket(
                         teamName,
                         new UpdateTeamPacket.Parameters(
                                 Component.empty(),
@@ -154,9 +161,13 @@ public final class Tab {
                         List.of(updateDisplayNameEntry)
                 );
             }
+        }
 
-            for (int j = 0; j < listSize; j++) {
-                TabEntry viewerEntry = list.get(j);
+        for (TabEntry entry : list) {
+            Player player = entry.player;
+            deleteTeamsBatch.forEach(packet -> NetworkUtil.sendPacket(player, packet));
+
+            for (TabEntry viewerEntry : list) {
                 Player viewer = viewerEntry.player;
                 if(entry != viewerEntry) {
                     TabEntry.ListedResult result = viewerEntry.isListed(entry);
@@ -188,19 +199,13 @@ public final class Tab {
                     assert entry.updateDisplayNamePacket != null;
                     NetworkUtil.sendPacket(viewer, entry.updateDisplayNamePacket);
                 }
+            }
 
-                if(entry.freshTeamName) {
-                    UUID oldOwner = viewerEntry.fakeTeams.put(entry.teamName, player.getUniqueId());
-                    if(oldOwner != null)
-                        NetworkUtil.sendPacket(viewer, UpdateTeamPacket.createRemovePacket(entry.teamName));
-
-                    assert entry.teamAddPacket != null;
-                    NetworkUtil.sendPacket(viewer, entry.teamAddPacket);
-                }
+            for (MinecraftPacket addTeam : addTeamsBatch) {
+                NetworkUtil.sendPacket(player, addTeam);
             }
 
             entry.freshDisplayName = false;
-            entry.freshTeamName = false;
 
             var headerAndFooter = backendCommunication.headerAndFooter(player);
             player.sendPlayerListHeaderAndFooter(

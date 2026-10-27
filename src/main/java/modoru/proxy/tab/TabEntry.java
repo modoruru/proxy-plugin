@@ -26,7 +26,7 @@ public final class TabEntry implements Comparable<TabEntry> {
 
     @Nullable String teamName;
     boolean freshTeamName = true;
-    @Nullable UpdateTeamPacket teamAddPacket;
+    @Nullable UpdateTeamPacket teamAddPacket, teamRemovePacket;
     @Nullable UpsertPlayerInfoPacket updateDisplayNamePacket;
 
     TabEntry(Tab tab, Player player, SequencedMap<Key, Comparator<TabEntry>> sorters, Predicate<Player> listedPredicate) {

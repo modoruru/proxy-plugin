@@ -38,12 +38,15 @@ public final class PacketRegistration {
                 StateRegistry.PLAY,
                 UpdateTeamPacket.class,
                 UpdateTeamPacket::new,
+
+                // https://minecraft.wiki/w/Java_Edition_protocol/Packets#Update_Teams
                 mapping(0x60, ProtocolVersion.MINECRAFT_1_20_5),
                 mapping(0x67, ProtocolVersion.MINECRAFT_1_21_2),
                 mapping(0x66, ProtocolVersion.MINECRAFT_1_21_5),
                 mapping(0x6B, ProtocolVersion.MINECRAFT_1_21_9),
                 mapping(0x6D, ProtocolVersion.MINECRAFT_26_1),
-                mapping(0x6D, ProtocolVersion.MINECRAFT_26_2)
+                mapping(0x6D, ProtocolVersion.MINECRAFT_26_2),
+                mapping(0x6F, ProtocolVersion.MINECRAFT_26_3)
         );
     }
 
